@@ -22,12 +22,17 @@ if desired_default in available_models:
 selected_model = st.sidebar.selectbox("Select AI Model", available_models, index=default_model_index)
 
 # Load defaults from config file if available
-default_config = agent.load_config()
-default_log = default_config.get("log_file_path", "")
-default_repo = default_config.get("repo_path", "")
+repo_config = agent.load_config()
+repo_names = list(repo_config.keys()) if isinstance(repo_config, dict) else []
 
-log_path = st.sidebar.text_input("Log File Path", value=default_log)
-repo_path = st.sidebar.text_input("Repository Path", value=default_repo)
+log_path = st.sidebar.text_input("Log File Path")
+
+repo_name = st.sidebar.selectbox("Repository", repo_names) if repo_names else None
+repo_path = repo_config.get(repo_name) if repo_name else None
+
+if not repo_path and not repo_names:
+     # Fallback for manual entry if config is empty or invalid
+     repo_path = st.sidebar.text_input("Repository Path (Manual)")
 
 if st.sidebar.button("Reload Config"):
     st.experimental_rerun()

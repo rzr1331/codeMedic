@@ -1,21 +1,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { api, ErrorCluster } from './api';
+import { api, ErrorCluster, Config } from './api';
 import { Sidebar } from './components/Sidebar';
 import { ClusterList } from './components/ClusterList';
 import { TerminalView } from './components/TerminalView';
 import { DiffView } from './components/DiffView';
 import { AlertTriangle, Wrench } from 'lucide-react';
 
-const REPO_BASE_PATH = '/Users/rzr1331/code-base';
-
 export default function Home() {
   const [logContent, setLogContent] = useState('');
   const [uploadedFilePath, setUploadedFilePath] = useState('');
   const [repoName, setRepoName] = useState('');
-  const [models, setModels] = useState<string[]>([]);
-  const [selectedModel, setSelectedModel] = useState('');
 
   const [errors, setErrors] = useState<ErrorCluster[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -28,24 +24,27 @@ export default function Home() {
   const [fixLogs, setFixLogs] = useState<string[]>([]);
   const [repoSyncStatus, setRepoSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [showReview, setShowReview] = useState(false);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [currentBranchName, setCurrentBranchName] = useState<string | null>(null);
+
+  const [repoConfig, setRepoConfig] = useState<Config>({});
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const config = await api.getConfig();
+        setRepoConfig(config);
+      } catch (err) {
+        console.error("Failed to load config:", err);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   // Helper to convert repo name to full path
   const getRepoPath = (name: string) => {
-    if (!name) return '';
-    return `${REPO_BASE_PATH}/${name}`;
+    return repoConfig[name] || '';
   };
-
-  // Initial Load
-  useEffect(() => {
-    api.getModels().then(ms => {
-      setModels(ms);
-      if (ms.includes('opencode/glm-4.7-free')) {
-          setSelectedModel('opencode/glm-4.7-free');
-      } else if (ms.length > 0) {
-          setSelectedModel(ms[0]);
-      }
-    }).catch(console.error);
-  }, []);
 
   // Debug: Monitor uploadedFilePath changes
   useEffect(() => {
@@ -147,8 +146,7 @@ export default function Home() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 repo_path: repoPath,
-                error_trace: selectedError.trace,
-                model: selectedModel
+                error_trace: selectedError.trace
             })
         });
 
@@ -220,6 +218,8 @@ export default function Home() {
       setFixStatus('running');
       setFixMsg('');
       setShowReview(false);
+      setCurrentJobId(null);
+      setCurrentBranchName(null);
 
       // Sync repo
       try {
@@ -243,8 +243,7 @@ export default function Home() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     repo_path: repoPath,
-                    error_trace: selectedError.trace,
-                    model: selectedModel
+                    error_trace: selectedError.trace
                 })
           });
 
@@ -275,7 +274,15 @@ export default function Home() {
                   const message = buffer.slice(0, eventIndex);
                   buffer = buffer.slice(eventIndex + 2);
 
-                  if (message.startsWith('event: complete')) {
+                  if (message.startsWith('event: job_id')) {
+                      // Extract job_id from the event for cancellation support
+                      const dataLine = message.split('\n').find(l => l.startsWith('data: '));
+                      if (dataLine) {
+                          const jobId = dataLine.slice(6).trim();
+                          console.log('Received job_id:', jobId);
+                          setCurrentJobId(jobId);
+                      }
+                  } else if (message.startsWith('event: complete')) {
                       const dataLine = message.split('\n').find(l => l.startsWith('data: '));
                       if (dataLine) {
                           const jsonStr = dataLine.slice(6);
@@ -284,6 +291,11 @@ export default function Home() {
                           if (result.success) {
                               setFixStatus('success');
                               setShowReview(true);
+                              // Store branch name for PR creation
+                              if (result.branch_name) {
+                                  setCurrentBranchName(result.branch_name);
+                                  console.log('Branch name stored:', result.branch_name);
+                              }
                           } else {
                               setFixStatus('error');
                               setFixMsg(result.message);
@@ -304,29 +316,90 @@ export default function Home() {
   };
 
   const handleCancelFix = async () => {
+    if (!currentJobId) {
+      console.error("Cannot cancel: no job_id available");
+      return;
+    }
     try {
-      await api.cancelFix();
+      await api.cancelFix(currentJobId);
       setFixStatus('idle');
       setFixMsg('Cancelled by user.');
       setFixLogs(prev => [...prev, '--- CANCELLED ---']);
+      setCurrentJobId(null);
     } catch (e: any) {
       console.error("Cancel failed:", e);
     }
   };
 
-  const onCommitChanges = async () => {
+  const onCommitChanges = async (): Promise<boolean> => {
      const repoPath = getRepoPath(repoName);
-     if (!repoPath) return;
+     if (!repoPath) return false;
 
      try {
          await api.commitChanges(repoPath, `Fix: ${selectedError?.message.split('\n')[0]}`);
-         alert("Changes committed successfully!");
-         setShowReview(false);
-         setFixStatus('idle');
-         setFixLogs([]);
+         return true;
      } catch (e: any) {
          alert(`Commit failed: ${e.response?.data?.detail}`);
-         throw e;
+         return false;
+     }
+  };
+
+  const onCommitAndPush = async (): Promise<boolean> => {
+     const repoPath = getRepoPath(repoName);
+     if (!repoPath) return false;
+
+     try {
+         await api.commitAndPush(repoPath, `Fix: ${selectedError?.message.split('\n')[0]}`);
+         return true;
+     } catch (e: any) {
+         alert(`Commit & Push failed: ${e.response?.data?.detail}`);
+         return false;
+     }
+  };
+
+  const onCommitPushAndPr = async (): Promise<{success: boolean, prUrl?: string}> => {
+     const repoPath = getRepoPath(repoName);
+     if (!repoPath) return {success: false};
+
+     try {
+         // Pass currentBranchName so PR is created for the correct branch
+         // even if another user has changed the repo's current checkout
+         const result = await api.commitPushAndPr(
+             repoPath,
+             `Fix: ${selectedError?.message.split('\n')[0]}`,
+             currentBranchName || undefined
+         );
+         return {success: true, prUrl: result.pr_url};
+     } catch (e: any) {
+         alert(`Commit, Push & PR failed: ${e.response?.data?.detail}`);
+         return {success: false};
+     }
+  };
+
+  const onPushBranch = async (): Promise<boolean> => {
+     const repoPath = getRepoPath(repoName);
+     if (!repoPath) return false;
+
+     try {
+         await api.pushBranch(repoPath);
+         return true;
+     } catch (e: any) {
+         alert(`Push failed: ${e.response?.data?.detail}`);
+         return false;
+     }
+  };
+
+  const onCreatePullRequest = async (): Promise<string | null> => {
+     const repoPath = getRepoPath(repoName);
+     if (!repoPath || !selectedError) return null;
+
+     try {
+         const prTitle = `Fix: ${selectedError.message.split('\n')[0].slice(0, 80)}`;
+         const result = await api.createPullRequest(repoPath, prTitle);
+         return result.pr_url;
+     } catch (e: any) {
+         alert(`PR creation failed: ${e.response?.data?.detail}`);
+         return null;
      }
   };
 
@@ -363,8 +436,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repo_path: repoPath,
-          error_trace: followUpTrace,
-          model: selectedModel
+          error_trace: followUpTrace
         })
       });
       
@@ -415,8 +487,9 @@ export default function Home() {
           logContent={logContent} setLogContent={setLogContent}
           uploadedFilePath={uploadedFilePath} setUploadedFilePath={setUploadedFilePath}
           repoName={repoName} setRepoName={setRepoName}
-          models={models} selectedModel={selectedModel} setSelectedModel={setSelectedModel}
           onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing}
+          repos={Object.keys(repoConfig)}
+          currentRepoPath={getRepoPath(repoName)}
       />
 
       <main className="flex-1 flex flex-col min-w-0">
@@ -459,7 +532,7 @@ export default function Home() {
                         </div>
                         <div>
                             <h3 className="font-semibold text-slate-900 mb-1">Automated Fix</h3>
-                            <p className="text-sm text-slate-500">Delegate this error to OpenCode AI ({selectedModel})</p>
+                            <p className="text-sm text-slate-500">Delegate this error to OpenCode AI</p>
                         </div>
                         <div className="flex gap-2 w-full max-w-xs">
                           {fixStatus === 'running' ? (
@@ -498,6 +571,10 @@ export default function Home() {
                         repoPath={getRepoPath(repoName)}
                         onCommit={onCommitChanges}
                         onDiscard={onDiscardChanges}
+                        onPush={onPushBranch}
+                        onCommitAndPush={onCommitAndPush}
+                        onCommitPushAndPr={onCommitPushAndPr}
+                        onCreatePR={onCreatePullRequest}
                         onRequestChanges={handleRequestChanges}
                         isRequestingChanges={isRequestingChanges}
                     />

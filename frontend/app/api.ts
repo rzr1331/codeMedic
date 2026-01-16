@@ -2,10 +2,8 @@ import axios from 'axios';
 
 const API_BASE = 'http://localhost:8000';
 
-export interface Config {
-  log_file_path: string;
-  repo_path: string;
-}
+// Config is a map of RepoName -> RepoPath
+export type Config = Record<string, string>;
 
 export interface ErrorCluster {
   message: string;
@@ -32,7 +30,6 @@ export const api = {
       `${API_BASE}/logs/upload`,
       formData,
       {
-        headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total && onProgress) {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -81,9 +78,44 @@ export const api = {
       const res = await axios.post(`${API_BASE}/repo/commit`, { repo_path: repoPath, message });
       return res.data;
   },
+
+  pushBranch: async (repoPath: string) => {
+      const res = await axios.post<{message: string}>(`${API_BASE}/repo/push`, { repo_path: repoPath });
+      return res.data;
+  },
+
+  commitAndPush: async (repoPath: string, message: string) => {
+      const res = await axios.post<{message: string; commit_message: string; push_message: string}>(`${API_BASE}/repo/commit-and-push`, { repo_path: repoPath, message });
+      return res.data;
+  },
+
+  commitPushAndPr: async (repoPath: string, message: string, branchName?: string) => {
+      const res = await axios.post<{message: string; commit_message: string; push_message: string; pr_message: string; pr_url: string}>(`${API_BASE}/repo/commit-push-and-pr`, {
+          repo_path: repoPath,
+          message,
+          branch_name: branchName
+      });
+      return res.data;
+  },
+
+  createPullRequest: async (repoPath: string, title: string, body?: string) => {
+      const res = await axios.post<{message: string; pr_url: string}>(`${API_BASE}/repo/create-pr`, {
+          repo_path: repoPath,
+          title,
+          body
+      });
+      return res.data;
+  },
   
-  cancelFix: async () => {
-      const res = await axios.post(`${API_BASE}/fix/cancel`);
+  getQueue: async (repoPath?: string) => {
+      const url = repoPath ? `${API_BASE}/queue?repo_path=${encodeURIComponent(repoPath)}` : `${API_BASE}/queue`;
+      const res = await axios.get(url);
+      // Returns { repo: repo_path, jobs: [] } OR { queues: { ... } }
+      return res.data;
+  },
+
+  cancelFix: async (jobId: string) => {
+      const res = await axios.post(`${API_BASE}/fix/cancel`, { job_id: jobId });
       return res.data;
   }
 };

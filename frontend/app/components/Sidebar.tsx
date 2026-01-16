@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Stethoscope, FileText, FolderGit2, Play, RefreshCw, Upload, FileCode } from 'lucide-react';
 import { api } from '../api';
+import { QueueList } from './QueueList';
 
 interface SidebarProps {
   logContent: string;
@@ -9,21 +10,19 @@ interface SidebarProps {
   setUploadedFilePath: (val: string) => void;
   repoName: string;
   setRepoName: (val: string) => void;
-  models: string[];
-  selectedModel: string;
-  setSelectedModel: (val: string) => void;
   onAnalyze: () => void;
   isAnalyzing: boolean;
+  repos: string[]; // Dynamic repo list
+  currentRepoPath?: string;
 }
-
-const REPOS = ['cipher', 'ofbml', 'ofb', 'oxyzo', 'smeassist'];
 
 export function Sidebar({
   logContent, setLogContent,
   uploadedFilePath, setUploadedFilePath,
   repoName, setRepoName,
-  models, selectedModel, setSelectedModel,
-  onAnalyze, isAnalyzing
+  onAnalyze, isAnalyzing,
+  repos,
+  currentRepoPath
 }: SidebarProps) {
   const [inputMode, setInputMode] = useState<'paste' | 'upload'>('paste');
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -194,24 +193,11 @@ export function Sidebar({
               className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#451a03] focus:border-transparent outline-none"
             >
               <option value="">Select a repository...</option>
-              {REPOS.map(repo => (
+              {repos.map(repo => (
                 <option key={repo} value={repo}>{repo}</option>
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase text-slate-400 tracking-wider">AI Model</label>
-          <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#451a03] focus:border-transparent outline-none"
-          >
-            {models.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
         </div>
 
         <button
@@ -229,6 +215,10 @@ export function Sidebar({
             </>
           )}
         </button>
+
+        {repoName && currentRepoPath && (
+             <QueueList repoPath={currentRepoPath} repoName={repoName} />
+        )}
       </div>
 
       <div className="p-4 border-t border-slate-200 text-xs text-slate-400 text-center">

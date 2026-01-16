@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
-import { Check, X, Loader2, FileCode, MessageSquare, Send } from 'lucide-react';
+import { Check, X, Loader2, FileCode, MessageSquare, Send, Upload, GitPullRequest, ExternalLink } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 
 interface DiffViewProps {
   repoPath: string;
-  onCommit: () => void;
+  onCommit: () => Promise<boolean>;
   onDiscard: () => void;
+  onPush: () => Promise<boolean>;
+  onCommitAndPush?: () => Promise<boolean>;
+  onCommitPushAndPr?: () => Promise<{success: boolean, prUrl?: string}>;
+  onCreatePR: () => Promise<string | null>;
   onRequestChanges?: (feedback: string) => void;
   isRequestingChanges?: boolean;
 }
@@ -62,12 +66,14 @@ function parseDiff(diff: string): DiffFile[] {
   return files;
 }
 
-export function DiffView({ repoPath, onCommit, onDiscard, onRequestChanges, isRequestingChanges }: DiffViewProps) {
+export function DiffView({ repoPath, onCommit, onDiscard, onPush, onCommitAndPush, onCommitPushAndPr, onCreatePR, onRequestChanges, isRequestingChanges }: DiffViewProps) {
   const [diff, setDiff] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [actionStatus, setActionStatus] = useState<'idle' | 'committing' | 'discarding'>('idle');
+  const [actionStatus, setActionStatus] = useState<'idle' | 'committing' | 'committing-and-pushing' | 'committing-push-and-pr' | 'discarding' | 'pushing' | 'creating-pr'>('idle');
   const [feedback, setFeedback] = useState('');
   const [showFeedback, setShowFeedback] = useState(false);
+  const [workflowStep, setWorkflowStep] = useState<'review' | 'committed' | 'pushed' | 'pr-created'>('review');
+  const [prUrl, setPrUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadDiff();
@@ -88,7 +94,66 @@ export function DiffView({ repoPath, onCommit, onDiscard, onRequestChanges, isRe
 
   const handleCommit = async () => {
     setActionStatus('committing');
-    try { await onCommit(); } finally { setActionStatus('idle'); }
+    try {
+      const success = await onCommit();
+      if (success) {
+        setWorkflowStep('committed');
+      }
+    } finally {
+      setActionStatus('idle');
+    }
+  };
+
+  const handlePush = async () => {
+    setActionStatus('pushing');
+    try {
+      const success = await onPush();
+      if (success) {
+        setWorkflowStep('pushed');
+      }
+    } finally {
+      setActionStatus('idle');
+    }
+  };
+
+  const handleCommitAndPush = async () => {
+    if (!onCommitAndPush) return;
+    setActionStatus('committing-and-pushing');
+    try {
+      const success = await onCommitAndPush();
+      if (success) {
+        setWorkflowStep('pushed');
+      }
+    } finally {
+      setActionStatus('idle');
+    }
+  };
+
+  const handleCommitPushAndPr = async () => {
+    if (!onCommitPushAndPr) return;
+    setActionStatus('committing-push-and-pr');
+    try {
+      const result = await onCommitPushAndPr();
+      if (result.success && result.prUrl) {
+        setPrUrl(result.prUrl);
+        setWorkflowStep('pr-created');
+      }
+    } finally {
+      setActionStatus('idle');
+    }
+  };
+
+  const handleCreatePR = async () => {
+    setActionStatus('creating-pr');
+    try {
+      const url = await onCreatePR();
+      if (url) {
+        setPrUrl(url);
+        setWorkflowStep('pr-created');
+      }
+    } finally {
+      setActionStatus('idle');
+    }
   };
 
   const handleDiscard = async () => {
@@ -178,23 +243,27 @@ export function DiffView({ repoPath, onCommit, onDiscard, onRequestChanges, isRe
       
       {/* Request Changes Section */}
       {onRequestChanges && (
-        <div className="bg-amber-950/20 border border-amber-900/50 rounded-lg overflow-hidden">
-          <button 
+        <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+          {/* Header */}
+          <div
             onClick={() => setShowFeedback(!showFeedback)}
-            className="w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-amber-950/30 transition-colors"
+            className="px-4 py-3 border-b border-gray-800 bg-gray-950 flex justify-between items-center cursor-pointer hover:bg-gray-900/50 transition-colors"
           >
-            <MessageSquare className="w-4 h-4 text-amber-400" />
-            <span className="text-sm font-medium text-amber-200">Request Changes</span>
-            <span className="text-xs text-amber-400/60 ml-auto">{showFeedback ? 'Collapse' : 'Expand'}</span>
-          </button>
-          
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-blue-400" />
+              <h3 className="text-sm font-semibold text-gray-200">Request Changes</h3>
+            </div>
+            <span className="text-xs text-gray-500 cursor-pointer">{showFeedback ? '▼ Collapse' : '▶ Expand'}</span>
+          </div>
+
+          {/* Content */}
           {showFeedback && (
-            <div className="p-4 border-t border-amber-900/30 space-y-3">
+            <div className="p-4 space-y-3">
               <textarea
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 placeholder="Describe what changes you'd like to make... e.g., 'Use a different exception type', 'Add null check before this line', 'Rename the variable to something more descriptive'"
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm h-24 resize-none focus:ring-1 focus:ring-amber-500 outline-none placeholder-gray-600"
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm h-24 resize-none focus:ring-1 focus:ring-blue-500 outline-none placeholder-gray-600 text-gray-200"
               />
               <button
                 onClick={() => {
@@ -205,7 +274,7 @@ export function DiffView({ repoPath, onCommit, onDiscard, onRequestChanges, isRe
                   }
                 }}
                 disabled={!feedback.trim() || isRequestingChanges}
-                className="w-full bg-amber-700 hover:bg-amber-600 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
+                className="w-full bg-blue-700 hover:bg-blue-600 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
               >
                 {isRequestingChanges ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Applying Changes...</>
@@ -218,25 +287,138 @@ export function DiffView({ repoPath, onCommit, onDiscard, onRequestChanges, isRe
         </div>
       )}
       
+      {/* Workflow Status Indicator */}
+      {workflowStep !== 'review' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div className="flex items-center gap-4">
+            <div className={twMerge(
+              "flex items-center gap-2 text-sm",
+              workflowStep === 'committed' || workflowStep === 'pushed' || workflowStep === 'pr-created' ? "text-green-400" : "text-gray-500"
+            )}>
+              <Check className="w-4 h-4" />
+              <span>Committed</span>
+            </div>
+            <div className="h-px flex-1 bg-gray-700" />
+            <div className={twMerge(
+              "flex items-center gap-2 text-sm",
+              workflowStep === 'pushed' || workflowStep === 'pr-created' ? "text-green-400" : "text-gray-500"
+            )}>
+              <Upload className="w-4 h-4" />
+              <span>Pushed</span>
+            </div>
+            <div className="h-px flex-1 bg-gray-700" />
+            <div className={twMerge(
+              "flex items-center gap-2 text-sm",
+              workflowStep === 'pr-created' ? "text-green-400" : "text-gray-500"
+            )}>
+              <GitPullRequest className="w-4 h-4" />
+              <span>PR Created</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="flex gap-3">
-        <button 
-          onClick={handleCommit}
-          disabled={actionStatus !== 'idle' || isRequestingChanges}
-          className="flex-1 bg-green-700 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
-        >
-          {actionStatus === 'committing' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4"/>}
-          Approve & Commit
-        </button>
-        
-        <button 
-          onClick={handleDiscard}
-          disabled={actionStatus !== 'idle' || isRequestingChanges}
-          className="flex-1 bg-gray-800 hover:bg-gray-700 border border-red-900/50 text-red-200 py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
-        >
-          {actionStatus === 'discarding' ? <Loader2 className="w-4 h-4 animate-spin"/> : <X className="w-4 h-4"/>}
-          Discard Changes
-        </button>
+        {workflowStep === 'review' && (
+          <>
+            {onCommitPushAndPr ? (
+              <>
+                <button
+                  onClick={handleCommitPushAndPr}
+                  disabled={actionStatus !== 'idle' || isRequestingChanges}
+                  className="flex-[2] bg-purple-700 hover:bg-purple-600 text-white py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
+                >
+                  {actionStatus === 'committing-push-and-pr' ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Check className="w-4 h-4"/><GitPullRequest className="w-4 h-4"/></>}
+                  Approve & Create PR
+                </button>
+
+                <button
+                  onClick={handleDiscard}
+                  disabled={actionStatus !== 'idle' || isRequestingChanges}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 border border-red-900/50 text-red-200 py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
+                >
+                  {actionStatus === 'discarding' ? <Loader2 className="w-4 h-4 animate-spin"/> : <X className="w-4 h-4"/>}
+                  Discard
+                </button>
+              </>
+            ) : onCommitAndPush ? (
+              <>
+                <button
+                  onClick={handleCommitAndPush}
+                  disabled={actionStatus !== 'idle' || isRequestingChanges}
+                  className="flex-[2] bg-green-700 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
+                >
+                  {actionStatus === 'committing-and-pushing' ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Check className="w-4 h-4"/><Upload className="w-4 h-4"/></>}
+                  Approve, Commit & Push
+                </button>
+
+                <button
+                  onClick={handleDiscard}
+                  disabled={actionStatus !== 'idle' || isRequestingChanges}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 border border-red-900/50 text-red-200 py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
+                >
+                  {actionStatus === 'discarding' ? <Loader2 className="w-4 h-4 animate-spin"/> : <X className="w-4 h-4"/>}
+                  Discard
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleCommit}
+                  disabled={actionStatus !== 'idle' || isRequestingChanges}
+                  className="flex-1 bg-green-700 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
+                >
+                  {actionStatus === 'committing' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4"/>}
+                  Approve & Commit
+                </button>
+
+                <button
+                  onClick={handleDiscard}
+                  disabled={actionStatus !== 'idle' || isRequestingChanges}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 border border-red-900/50 text-red-200 py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
+                >
+                  {actionStatus === 'discarding' ? <Loader2 className="w-4 h-4 animate-spin"/> : <X className="w-4 h-4"/>}
+                  Discard Changes
+                </button>
+              </>
+            )}
+          </>
+        )}
+
+        {workflowStep === 'committed' && (
+          <button
+            onClick={handlePush}
+            disabled={actionStatus !== 'idle'}
+            className="flex-1 bg-blue-700 hover:bg-blue-600 text-white py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
+          >
+            {actionStatus === 'pushing' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
+            Push to Remote
+          </button>
+        )}
+
+        {workflowStep === 'pushed' && (
+          <button
+            onClick={handleCreatePR}
+            disabled={actionStatus !== 'idle'}
+            className="flex-1 bg-purple-700 hover:bg-purple-600 text-white py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 font-medium transition-colors"
+          >
+            {actionStatus === 'creating-pr' ? <Loader2 className="w-4 h-4 animate-spin"/> : <GitPullRequest className="w-4 h-4"/>}
+            Create Pull Request
+          </button>
+        )}
+
+        {workflowStep === 'pr-created' && prUrl && (
+          <a
+            href={prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 bg-green-700 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors"
+          >
+            <ExternalLink className="w-4 h-4"/>
+            View Pull Request
+          </a>
+        )}
       </div>
     </div>
   );
