@@ -8,10 +8,9 @@ const getApiBase = () => {
   if (typeof window !== 'undefined') {
     return `${window.location.protocol}//${window.location.hostname}:8000`;
   }
+  // SSR fallback - will be replaced client-side
   return 'http://localhost:8000';
 };
-
-const API_BASE = getApiBase();
 
 // Config is a map of RepoName -> RepoPath
 export type Config = Record<string, string>;
@@ -24,12 +23,12 @@ export interface ErrorCluster {
 
 export const api = {
   getConfig: async () => {
-    const res = await axios.get<Config>(`${API_BASE}/config`);
+    const res = await axios.get<Config>(`${getApiBase()}/config`);
     return res.data;
   },
 
   getModels: async () => {
-    const res = await axios.get<string[]>(`${API_BASE}/models`);
+    const res = await axios.get<string[]>(`${getApiBase()}/models`);
     return res.data;
   },
 
@@ -38,7 +37,7 @@ export const api = {
     formData.append('file', file);
 
     const res = await axios.post<{ temp_path: string; original_filename: string; size: number }>(
-      `${API_BASE}/logs/upload`,
+      `${getApiBase()}/logs/upload`,
       formData,
       {
         onUploadProgress: (progressEvent) => {
@@ -54,54 +53,54 @@ export const api = {
 
   analyzeLogFile: async (filePath: string) => {
     console.log('[API] analyzeLogFile called with path:', filePath);
-    console.log('[API] Sending request to:', `${API_BASE}/logs/analyze_file`);
-    const res = await axios.post<ErrorCluster[]>(`${API_BASE}/logs/analyze_file`, { file_path: filePath });
+    console.log('[API] Sending request to:', `${getApiBase()}/logs/analyze_file`);
+    const res = await axios.post<ErrorCluster[]>(`${getApiBase()}/logs/analyze_file`, { file_path: filePath });
     console.log('[API] Response received, status:', res.status);
     return res.data;
   },
 
   analyzeLogs: async (logContent: string) => {
-    const res = await axios.post<ErrorCluster[]>(`${API_BASE}/logs/analyze`, { log_content: logContent });
+    const res = await axios.post<ErrorCluster[]>(`${getApiBase()}/logs/analyze`, { log_content: logContent });
     return res.data;
   },
 
   cleanupTempFile: async (filePath: string) => {
-    const res = await axios.post(`${API_BASE}/logs/cleanup`, { file_path: filePath });
+    const res = await axios.post(`${getApiBase()}/logs/cleanup`, { file_path: filePath });
     return res.data;
   },
   
   syncRepo: async (repoPath: string) => {
-    const res = await axios.post(`${API_BASE}/repo/sync`, { repo_path: repoPath });
+    const res = await axios.post(`${getApiBase()}/repo/sync`, { repo_path: repoPath });
     return res.data;
   },
   
   getDiff: async (repoPath: string) => {
-    const res = await axios.get<{diff: string}>(`${API_BASE}/repo/diff?repo_path=${encodeURIComponent(repoPath)}`);
+    const res = await axios.get<{diff: string}>(`${getApiBase()}/repo/diff?repo_path=${encodeURIComponent(repoPath)}`);
     return res.data;
   },
   
   discardChanges: async (repoPath: string) => {
-     const res = await axios.post(`${API_BASE}/repo/discard`, { repo_path: repoPath });
+     const res = await axios.post(`${getApiBase()}/repo/discard`, { repo_path: repoPath });
      return res.data;
   },
   
   commitChanges: async (repoPath: string, message: string) => {
-      const res = await axios.post(`${API_BASE}/repo/commit`, { repo_path: repoPath, message });
+      const res = await axios.post(`${getApiBase()}/repo/commit`, { repo_path: repoPath, message });
       return res.data;
   },
 
   pushBranch: async (repoPath: string) => {
-      const res = await axios.post<{message: string}>(`${API_BASE}/repo/push`, { repo_path: repoPath });
+      const res = await axios.post<{message: string}>(`${getApiBase()}/repo/push`, { repo_path: repoPath });
       return res.data;
   },
 
   commitAndPush: async (repoPath: string, message: string) => {
-      const res = await axios.post<{message: string; commit_message: string; push_message: string}>(`${API_BASE}/repo/commit-and-push`, { repo_path: repoPath, message });
+      const res = await axios.post<{message: string; commit_message: string; push_message: string}>(`${getApiBase()}/repo/commit-and-push`, { repo_path: repoPath, message });
       return res.data;
   },
 
   commitPushAndPr: async (repoPath: string, message: string, branchName?: string) => {
-      const res = await axios.post<{message: string; commit_message: string; push_message: string; pr_message: string; pr_url: string}>(`${API_BASE}/repo/commit-push-and-pr`, {
+      const res = await axios.post<{message: string; commit_message: string; push_message: string; pr_message: string; pr_url: string}>(`${getApiBase()}/repo/commit-push-and-pr`, {
           repo_path: repoPath,
           message,
           branch_name: branchName
@@ -110,7 +109,7 @@ export const api = {
   },
 
   createPullRequest: async (repoPath: string, title: string, body?: string) => {
-      const res = await axios.post<{message: string; pr_url: string}>(`${API_BASE}/repo/create-pr`, {
+      const res = await axios.post<{message: string; pr_url: string}>(`${getApiBase()}/repo/create-pr`, {
           repo_path: repoPath,
           title,
           body
@@ -119,14 +118,14 @@ export const api = {
   },
   
   getQueue: async (repoPath?: string) => {
-      const url = repoPath ? `${API_BASE}/queue?repo_path=${encodeURIComponent(repoPath)}` : `${API_BASE}/queue`;
+      const url = repoPath ? `${getApiBase()}/queue?repo_path=${encodeURIComponent(repoPath)}` : `${getApiBase()}/queue`;
       const res = await axios.get(url);
       // Returns { repo: repo_path, jobs: [] } OR { queues: { ... } }
       return res.data;
   },
 
   cancelFix: async (jobId: string) => {
-      const res = await axios.post(`${API_BASE}/fix/cancel`, { job_id: jobId });
+      const res = await axios.post(`${getApiBase()}/fix/cancel`, { job_id: jobId });
       return res.data;
   }
 };
