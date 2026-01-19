@@ -353,6 +353,8 @@ def run_opencode_fix(repo_path, error_context, job_id: str, model=None):
         base_cmd = 'source ~/.zshrc && opencode run --print-logs'
         if model:
             base_cmd += f' --model {shlex.quote(model)}'
+        else:
+            base_cmd += ' --model zai-coding-plan/glm-4.7'
         cmd = f'{base_cmd} {safe_prompt}'
 
         logger.info(f"📝 Executing OpenCode command in worktree: {worktree_path}")
