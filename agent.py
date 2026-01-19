@@ -414,11 +414,14 @@ def run_opencode_fix(repo_path, error_context, job_id: str, model=None):
             yield (False, "OpenCode succeeded but only IDE files were changed (excluded from commit).")
             return
 
+        commit_env = os.environ.copy()
+        commit_env["GIT_COMMITTER_NAME"] = "CodeMedic Bot"
+        commit_env["GIT_COMMITTER_EMAIL"] = "codemedic@automated.local"
         subprocess.run([
             "git", "commit",
             "-m", "AI Fix (Worktree)",
             "--author", "CodeMedic Bot <codemedic@automated.local>"
-        ], cwd=worktree_path, check=True)
+        ], cwd=worktree_path, check=True, env=commit_env)
 
         # Each user pushes to their own unique branch - Git handles remote ref locking
         # No repo_lock needed here, allows concurrent pushes from different worktrees
@@ -668,11 +671,14 @@ def run_git_commands(repo_path, message):
             
             # Commit
             # Use --no-verify to bypass failing pre-commit hooks
+            commit_env = os.environ.copy()
+            commit_env["GIT_COMMITTER_NAME"] = "CodeMedic Bot"
+            commit_env["GIT_COMMITTER_EMAIL"] = "codemedic@automated.local"
             subprocess.run([
                 "git", "commit", "--no-verify",
                 "-m", safe_message,
                 "--author", "CodeMedic Bot <codemedic@automated.local>"
-            ], cwd=repo_path, check=True, capture_output=True)
+            ], cwd=repo_path, check=True, capture_output=True, env=commit_env)
             
             return True, f"Success! Fix committed to branch: {branch_name}"
     except subprocess.CalledProcessError as e:
