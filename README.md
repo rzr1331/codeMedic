@@ -40,11 +40,18 @@ codeMedic/
    ```
 
 3. **OpenCode CLI**
-   - Must be installed and configured in your shell (`~/.zshrc`)
+   - Must be installed and configured in your shell (https://github.com/opencode-ai/opencode)
    - Used for AI-powered code analysis and fixes
 
 4. **Node.js 20+** (for frontend)
-   - Install via: `brew install node`
+   - Install via nvm (recommended):
+     ```bash
+     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+     source ~/.zshrc  # or restart your terminal
+     nvm install 20
+     nvm use 20
+     ```
+   - Or via Homebrew: `brew install node`
    - Or from [nodejs.org](https://nodejs.org/)
 
 5. **GitHub CLI** (optional, for PR creation)
@@ -58,28 +65,18 @@ codeMedic/
 
 ## Installation
 
-### 1. Clone the Repository
 
-```bash
-git clone <repository-url>
-cd codeMedic
-```
-
-### 2. Install Python Dependencies
+### 1. Install Python Dependencies
 
 The project uses `uv` for dependency management. Dependencies are automatically installed via the lock file.
 
 ```bash
-# Install dependencies
 uv sync
-
-# Activate the virtual environment
-source .venv/bin/activate  # On Linux/macOS
-# or
-.venv\Scripts\activate     # On Windows
 ```
 
-### 3. Install Frontend Dependencies
+Note: You don't need to activate the virtual environment. Use `uv run` to execute commands (e.g., `uv run python agent.py`).
+
+### 2. Install Frontend Dependencies
 
 ```bash
 cd frontend
@@ -87,7 +84,7 @@ npm install
 cd ..
 ```
 
-### 4. Configure Application
+### 3. Configure Application
 
 The `config.json` file is **optional for web users** but **required for CLI/dashboard users**.
 
@@ -111,14 +108,10 @@ Start both the FastAPI backend and Next.js frontend:
 
 **Terminal 1 - Backend:**
 ```bash
-# Ensure virtual environment is activated
-source .venv/bin/activate
-
-# Start FastAPI server
-uvicorn server:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**Terminal 2 - Frontend:**
+**Terminal 2 - Frontend (Development):**
 ```bash
 cd frontend
 npm run dev
@@ -132,15 +125,13 @@ Then open:
 ### Option 2: Streamlit Dashboard
 
 ```bash
-source .venv/bin/activate
-streamlit run dashboard.py
+uv run streamlit run dashboard.py
 ```
 
 ### Option 3: Command Line Interface
 
 ```bash
-source .venv/bin/activate
-python agent.py <path_to_log_file>
+uv run python agent.py <path_to_log_file>
 ```
 
 This will:
@@ -210,18 +201,28 @@ at com.example.Another.method(Another.java:456)
 ### Backend (FastAPI)
 
 ```bash
-source .venv/bin/activate
-uvicorn server:app --reload
+uv run uvicorn server:app --reload
 ```
 
 ### Frontend (Next.js)
 
+#### Development
 ```bash
 cd frontend
-npm run dev     # Development
-npm run build   # Production build
-npm run start   # Production server
-npm run lint    # Linting
+npm run dev
+```
+
+#### Production Deployment
+```bash
+cd frontend
+npm run build   # Build for production
+npm run start   # Start production server (serves on port 3000)
+```
+
+#### Linting
+```bash
+cd frontend
+npm run lint
 ```
 
 ## Troubleshooting
@@ -241,7 +242,7 @@ python --version  # Should show 3.13.x
 ### Port Already in Use
 Change the port if 8000 or 3000 are occupied:
 ```bash
-uvicorn server:app --port 8001
+uv run uvicorn server:app --port 8001
 cd frontend && npm run dev -- --port 3001
 ```
 

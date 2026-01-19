@@ -1,6 +1,18 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8000';
+const getApiBase = () => {
+  // Use environment variable if set, otherwise use current origin
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  // In browser, use current origin; during SSR, fallback to localhost
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return 'http://localhost:8000';
+};
+
+const API_BASE = getApiBase();
 
 // Config is a map of RepoName -> RepoPath
 export type Config = Record<string, string>;

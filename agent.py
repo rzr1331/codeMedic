@@ -28,11 +28,13 @@ def _get_thread_lock(repo_path: str) -> threading.Lock:
         return _repo_thread_locks[repo_path]
 
 # Configure logging
+LOG_FILE = "/tmp/codemedic.log"
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(LOG_FILE)
     ]
 )
 logger = logging.getLogger(__name__)
