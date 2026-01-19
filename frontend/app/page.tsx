@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { api, ErrorCluster, Config } from './api';
+import { api, ErrorCluster, Config, getApiBase } from './api';
 import { Sidebar } from './components/Sidebar';
 import { ClusterList } from './components/ClusterList';
 import { TerminalView } from './components/TerminalView';
@@ -141,7 +141,7 @@ export default function Home() {
 
     // 2. Start Streaming Fix
     try {
-        const response = await fetch('http://localhost:8000/fix/start', {
+        const response = await fetch(`${getApiBase()}/fix/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -238,7 +238,7 @@ export default function Home() {
       // Start streaming fix
       try {
           console.log('Starting OpenCode fix...');
-          const response = await fetch('http://localhost:8000/fix/start', {
+          const response = await fetch(`${getApiBase()}/fix/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -431,7 +431,7 @@ export default function Home() {
     const followUpTrace = `${selectedError.trace}\n\n[USER FEEDBACK ON PREVIOUS FIX]\n${feedback}\n\nPlease apply the requested changes to the code.`;
 
     try {
-      const response = await fetch('http://localhost:8000/fix/start', {
+      const response = await fetch(`${getApiBase()}/fix/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Must be a function called at request time to get correct browser URL
-const getApiBase = (): string => {
+export const getApiBase = (): string => {
   // Environment variable takes priority (set at build time)
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL;
