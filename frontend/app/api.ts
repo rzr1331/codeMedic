@@ -1,14 +1,19 @@
 import axios from 'axios';
 
-const getApiBase = () => {
+// Must be a function called at request time to get correct browser URL
+const getApiBase = (): string => {
+  // Environment variable takes priority (set at build time)
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL;
   }
-  // In browser, use current hostname with backend port 8000
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  // Browser: use current hostname with backend port
+  if (typeof window !== 'undefined' && window.location) {
+    const base = `${window.location.protocol}//${window.location.hostname}:8000`;
+    console.log('[API] Using dynamic base URL:', base);
+    return base;
   }
-  // SSR fallback - will be replaced client-side
+  // SSR fallback
+  console.log('[API] SSR fallback to localhost');
   return 'http://localhost:8000';
 };
 
