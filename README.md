@@ -40,7 +40,7 @@ codeMedic/
    ```
 
 3. **OpenCode CLI**
-   - Must be installed and configured in your shell (https://github.com/opencode-ai/opencode)
+   - Must be installed and configured in your shell (https://github.com/anomalyco/opencode)
    - Used for AI-powered code analysis and fixes
 
 4. **Node.js 20+** (for frontend)
