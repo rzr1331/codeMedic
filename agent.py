@@ -156,9 +156,9 @@ def parse_log_content(log_content):
     stack_confirmed = False
 
     # Regex for standard new entry (with optional prefix)
-    # Matches: [Optional Prefix] [Date YYYY-MM-DD]
+    # Matches: [Optional Prefix] [Date YYYY-MM-DD or YYYY/MM/DD]
     # Prefix: digits followed by - or :
-    regex_entry = re.compile(r'^(?:(\d+[-:])\s*)?(\d{4}-\d{2}-\d{2})')
+    regex_entry = re.compile(r'^(?:(\d+[-:])\s*)?(\d{4}[-/]\d{2}[-/]\d{2})')
     # Regex to strip prefix from continuation lines
     regex_prefix_continuation = re.compile(r'^\d+[-:]')
 
@@ -192,11 +192,13 @@ def parse_log_content(log_content):
         elif clean_line.startswith("v1|"):
             is_new_entry = True
         else:
-            # Continuation line
-            # Try to strip prefix
+            # Try to strip line number prefix (e.g., "28266974-" or "28266974:")
             prefix_match = regex_prefix_continuation.match(clean_line)
             if prefix_match:
-                 clean_line = clean_line[len(prefix_match.group(0)):]
+                clean_line = clean_line[len(prefix_match.group(0)):]
+                # After stripping prefix, check if it's a v1 entry
+                if clean_line.startswith("v1|"):
+                    is_new_entry = True
         
         stripped = clean_line.strip()
         
@@ -234,14 +236,16 @@ def parse_log_content(log_content):
                 pending_trace.append(clean_line + '\n')
                 
                 # Check for Stack Traces
-                # Java: "at ...", "Caused by: ...", "... "
+                # Java: "at ...", "Caused by: ...", "... ", exception class names
                 # Python: "File "...", line ...", "Traceback (most recent call last):", "During handling of the above exception..."
                 if (stripped.startswith("at ") or
                     stripped.startswith("Caused by:") or
                     stripped.startswith("... ") or
                     stripped.startswith('File "') or
                     stripped.startswith("Traceback (") or
-                    stripped.startswith("During handling of")):
+                    stripped.startswith("During handling of") or
+                    # Java exception class names (e.g., "java.lang.NullPointerException:")
+                    (("Exception:" in stripped or "Error:" in stripped) and "." in stripped)):
                     stack_confirmed = True
 
     # End of content check
